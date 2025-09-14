@@ -53,4 +53,6 @@ echo 'Last ID: ' . $db->getDriver()->lastInsertID() . "\n";
 // Cleanup (optional)
 // $db->execute('DROP TABLE demo_basic');
 
+var_dump($db->select()->from('demo_basic')->count());
+
 
