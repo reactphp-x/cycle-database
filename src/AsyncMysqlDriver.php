@@ -99,7 +99,7 @@ class AsyncMysqlDriver implements DriverInterface
             waitQueue: $waitQueue,
             waitTimeout: $waitTimeout
         );
-        $this->timezone = new \DateTimeZone('UTC');
+        $this->timezone = new \DateTimeZone('Asia/Shanghai');
     }
 
     public function isReadonly(): bool
@@ -170,6 +170,12 @@ class AsyncMysqlDriver implements DriverInterface
     public function query(string $statement, array $parameters = []): StatementInterface
     {
         try {
+            $parameters = array_map(function ($parameter) {
+                if ($parameter instanceof \Cycle\Database\Injection\Parameter) {
+                    return $parameter->getValue();
+                }
+                return $parameter;
+            }, $parameters);
             $result = Async\await($this->pool->query($statement, $parameters));
         } catch (\Throwable $e) {
             throw $this->mapException($e, $statement);
@@ -186,6 +192,13 @@ class AsyncMysqlDriver implements DriverInterface
             throw ReadonlyConnectionException::onWriteStatementExecution();
         }
         try {
+            $parameters = array_map(function ($parameter) {
+                if ($parameter instanceof \Cycle\Database\Injection\Parameter) {
+                    return $parameter->getValue();
+                }
+                return $parameter;
+            }, $parameters);
+            var_dump($query, $parameters);
             $result = Async\await($this->pool->query($query, $parameters));
         } catch (\Throwable $e) {
             throw $this->mapException($e, $query);
