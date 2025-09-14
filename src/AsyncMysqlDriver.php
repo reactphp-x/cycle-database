@@ -1,6 +1,6 @@
 <?php
 
-namespace ReactphpX\CycleOrm;
+namespace ReactphpX\CycleDatabase;
 
 use Cycle\Database\Config\DriverConfig;
 use Cycle\Database\Config\MySQLDriverConfig;
@@ -15,6 +15,7 @@ use Cycle\Database\Driver\MySQL\MySQLHandler;
 use Cycle\Database\Driver\MySQL\Query\MySQLDeleteQuery;
 use Cycle\Database\Driver\MySQL\Query\MySQLSelectQuery;
 use Cycle\Database\Driver\MySQL\Query\MySQLUpdateQuery;
+use Cycle\Database\Query\UpsertQuery;
 use Cycle\Database\Exception\ReadonlyConnectionException;
 use Cycle\Database\Exception\StatementException;
 use Cycle\Database\Query\BuilderInterface;
@@ -72,6 +73,7 @@ class AsyncMysqlDriver implements DriverInterface
         $builder = (new QueryBuilder(
             new MySQLSelectQuery(),
             new InsertQuery(),
+            new UpsertQuery(),
             new MySQLUpdateQuery(),
             new MySQLDeleteQuery(),
         ))->withDriver($driver);
@@ -167,7 +169,11 @@ class AsyncMysqlDriver implements DriverInterface
 
     public function query(string $statement, array $parameters = []): StatementInterface
     {
-        $result = Async\await($this->pool->query($statement, $parameters));
+        try {
+            $result = Async\await($this->pool->query($statement, $parameters));
+        } catch (\Throwable $e) {
+            throw $this->mapException($e, $statement);
+        }
         if (isset($result->insertId) && $result->insertId !== 0) {
             $this->lastInsertId = $result->insertId;
         }
@@ -179,7 +185,11 @@ class AsyncMysqlDriver implements DriverInterface
         if ($this->isReadonly()) {
             throw ReadonlyConnectionException::onWriteStatementExecution();
         }
-        $result = Async\await($this->pool->query($query, $parameters));
+        try {
+            $result = Async\await($this->pool->query($query, $parameters));
+        } catch (\Throwable $e) {
+            throw $this->mapException($e, $query);
+        }
         if (isset($result->insertId) && $result->insertId !== 0) {
             $this->lastInsertId = $result->insertId;
         }
@@ -234,6 +244,28 @@ class AsyncMysqlDriver implements DriverInterface
     public function quit(): void
     {
         Async\await($this->pool->quit());
+    }
+
+    private function mapException(\Throwable $exception, string $query): StatementException
+    {
+        if ((int) $exception->getCode() === 23000) {
+            return new StatementException\ConstrainException($exception, $query);
+        }
+
+        $message = \strtolower($exception->getMessage());
+
+        if (
+            \str_contains($message, 'server has gone away')
+            || \str_contains($message, 'broken pipe')
+            || \str_contains($message, 'connection')
+            || \str_contains($message, 'packets out of order')
+            || \str_contains($message, 'disconnected by the server because of inactivity')
+            || ((int) $exception->getCode() > 2000 && (int) $exception->getCode() < 2100)
+        ) {
+            return new StatementException\ConnectionException($exception, $query);
+        }
+
+        return new StatementException($exception, $query);
     }
 
     private static function buildUriFromPdoConfig(PDOConnectionConfig $config): string

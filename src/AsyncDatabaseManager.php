@@ -9,7 +9,7 @@
 
 declare(strict_types=1);
 
-namespace ReactphpX\CycleOrm;
+namespace ReactphpX\CycleDatabase;
 
 use Cycle\Database\DatabaseProviderInterface;
 use Cycle\Database\Config\DatabaseConfig;

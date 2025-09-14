@@ -3,10 +3,10 @@
 require __DIR__ . '/../vendor/autoload.php';
 
 use Cycle\Database\Config as Config;
-use ReactphpX\CycleOrm\AsyncDatabaseManager;
-use ReactphpX\CycleOrm\AsyncMysqlDriver;
-use ReactphpX\CycleOrm\AsyncMySQLDriverConfig;
-use ReactphpX\CycleOrm\AsyncTcpConnectionConfig;
+use ReactphpX\CycleDatabase\AsyncDatabaseManager;
+use ReactphpX\CycleDatabase\AsyncMysqlDriver;
+use ReactphpX\CycleDatabase\AsyncMySQLDriverConfig;
+use ReactphpX\CycleDatabase\AsyncTcpConnectionConfig;
 use function React\Async\await;
 
 $dbal = new AsyncDatabaseManager(new Config\DatabaseConfig([

@@ -9,7 +9,7 @@
 
 declare(strict_types=1);
 
-namespace ReactphpX\CycleOrm;
+namespace ReactphpX\CycleDatabase;
 
 use Cycle\Database\Config\MySQL\ConnectionConfig;
 use Cycle\Database\Config\ProvidesSourceString;

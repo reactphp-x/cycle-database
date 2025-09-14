@@ -9,15 +9,16 @@
 
 declare(strict_types=1);
 
-namespace ReactphpX\CycleOrm;
+namespace ReactphpX\CycleDatabase;
 
-use Cycle\Database\DatabaseInterface;
 use Cycle\Database\Driver\Driver;
 use Cycle\Database\Driver\DriverInterface;
 use Cycle\Database\Query\DeleteQuery;
 use Cycle\Database\Query\InsertQuery;
 use Cycle\Database\Query\SelectQuery;
 use Cycle\Database\Query\UpdateQuery;
+use Cycle\Database\Query\UpsertQuery;
+use Cycle\Database\DatabaseInterface;
 use Cycle\Database\StatementInterface;
 use Cycle\Database\TableInterface;
 use Cycle\Database\Table;
@@ -143,6 +144,13 @@ final class AsyncDatabase implements DatabaseInterface
             ->insertQuery($this->prefix, $table);
     }
 
+    public function upsert(?string $table = null): UpsertQuery
+    {
+        return $this->getDriver(self::WRITE)
+            ->getQueryBuilder()
+            ->upsertQuery($this->prefix, $table);
+    }
+
     public function update(?string $table = null, array $values = [], array $where = []): UpdateQuery
     {
         return $this->getDriver(self::WRITE)
@@ -174,8 +182,10 @@ final class AsyncDatabase implements DatabaseInterface
         callable $callback,
         ?string $isolationLevel = null,
     ): mixed {
+
         try {
             $result = $callback($this);
+
             return $result;
         } catch (\Throwable $e) {
             throw $e;

@@ -1,6 +1,6 @@
 <?php
 
-namespace ReactphpX\CycleOrm;
+namespace ReactphpX\CycleDatabase;
 
 use Cycle\Database\StatementInterface;
 
