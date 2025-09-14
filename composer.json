@@ -1,0 +1,21 @@
+{
+    "name": "reactphp-x/cycle-orm",
+    "require": {
+        "reactphp-x/mysql-pool": "^2.0",
+        "react/async": "^4",
+        "cycle/orm": "^2"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "ReactphpX\\CycleOrm\\": "src/"
+        }
+    },
+    "minimum-stability": "dev",
+    "authors": [
+        {
+            "name": "wpjscc",
+            "email": "wpjscc@gmail.com"
+        }
+    ]
+}
