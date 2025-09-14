@@ -44,6 +44,7 @@ $db->execute('DROP TABLE IF EXISTS users_upsert');
 $db->execute('CREATE TABLE users_upsert (
     id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(191) NOT NULL UNIQUE,
+    age INT NOT NULL DEFAULT 0,
     name VARCHAR(191) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
 
@@ -61,15 +62,16 @@ $db->upsert('users_upsert')
     ->run();
 
 $db->upsert('users_upsert')
-    ->columns('email', 'name')
+    ->columns('email', 'name', 'age')
+    ->updates('age', 'name')
     ->values([
-        ['email' => 'adam@email.com', 'name' => 'Charlie2'],
-        ['email' => 'dave@email.com', 'name' => 'Dave2'],
+        ['email' => 'adam@email.com', 'name' => 'Charlie2', 'age' => 10],
+        ['email' => 'dave@email.com', 'name' => 'Dave10', 'age' => 40],
     ])
     ->run();
 
 // Verify
-$rows = $db->query('SELECT email, name FROM users_upsert ORDER BY email')->fetchAll();
+$rows = $db->query('SELECT email, name, age FROM users_upsert ORDER BY email')->fetchAll();
 var_dump($rows);
 
 // Reference: Upsert semantics follow Cycle Database PR #231

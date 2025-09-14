@@ -10,7 +10,7 @@ use Cycle\Database\Driver\HandlerInterface;
 use Cycle\Database\Driver\CompilerInterface;
 use Cycle\Database\Driver\CachingCompilerInterface;
 use Cycle\Database\Driver\CompilerCache;
-use Cycle\Database\Driver\MySQL\MySQLCompiler;
+// use Cycle\Database\Driver\MySQL\MySQLCompiler;
 use Cycle\Database\Driver\MySQL\MySQLHandler;
 use Cycle\Database\Driver\MySQL\Query\MySQLDeleteQuery;
 use Cycle\Database\Driver\MySQL\Query\MySQLSelectQuery;
