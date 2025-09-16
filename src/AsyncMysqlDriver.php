@@ -69,7 +69,11 @@ class AsyncMysqlDriver implements DriverInterface
         // Initialize schema handler, compiler, and query builder similar to MySQLDriver
         $handler = (new MySQLHandler())->withDriver($driver);
         $compiler = new MySQLCompiler('``');
-        $queryCompiler = $compiler instanceof CachingCompilerInterface ? new CompilerCache($compiler) : $compiler;
+        if ($config->queryCache) {
+            $queryCompiler = $compiler instanceof CachingCompilerInterface ? new CompilerCache($compiler) : $compiler;
+        } else {
+            $queryCompiler = $compiler;
+        }
         $builder = (new QueryBuilder(
             new MySQLSelectQuery(),
             new InsertQuery(),

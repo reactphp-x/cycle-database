@@ -54,5 +54,7 @@ echo 'Last ID: ' . $db->getDriver()->lastInsertID() . "\n";
 // $db->execute('DROP TABLE demo_basic');
 
 var_dump($db->select()->from('demo_basic')->count());
+var_dump($db->select()->from('demo_basic')->limit(1)->fetchAll());
+var_dump($db->select()->from('demo_basic')->where('id', 1)->fetchAll());
 
 

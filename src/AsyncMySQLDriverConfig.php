@@ -26,7 +26,7 @@ class AsyncMySQLDriverConfig extends DriverConfig
         string $driver = AsyncMySQLDriver::class,
         bool $reconnect = true,
         string $timezone = 'Asia/Shanghai',
-        bool $queryCache = true,
+        bool $queryCache = false,
         bool $readonlySchema = false,
         bool $readonly = false,
         array $options = [],
