@@ -202,7 +202,6 @@ class AsyncMysqlDriver implements DriverInterface
                 }
                 return $parameter;
             }, $parameters);
-            var_dump($query, $parameters);
             $result = Async\await($this->pool->query($query, $parameters));
         } catch (\Throwable $e) {
             throw $this->mapException($e, $query);
