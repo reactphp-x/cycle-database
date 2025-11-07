@@ -24,7 +24,7 @@ class AsyncStatement implements StatementInterface, \IteratorAggregate
         return $this->queryString;
     }
 
-    public function fetch(int $mode = self::FETCH_OBJ): mixed
+    public function fetch(int $mode = self::FETCH_ASSOC): mixed
     {
         if (!isset($this->result->resultRows)) {
             return false;

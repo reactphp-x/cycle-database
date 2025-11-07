@@ -24,12 +24,13 @@ use Cycle\Database\Query\QueryBuilder;
 use Cycle\Database\StatementInterface;
 use React\Async;
 use ReactphpX\MySQL\Pool;
+use Cycle\Database\Config\ProvidesSourceString;
 
 class AsyncMysqlDriver implements DriverInterface
 {
     private Pool $pool;
     private $lastInsertId = null;
-
+    private DriverConfig $config;
     private bool $readonly = false;
     private \DateTimeZone $timezone;
 
@@ -85,6 +86,7 @@ class AsyncMysqlDriver implements DriverInterface
         $driver->schemaHandler = $handler;
         $driver->queryCompiler = $queryCompiler;
         $driver->queryBuilder = $builder;
+        $driver->config = $config;
 
         return $driver;
     }
@@ -116,6 +118,20 @@ class AsyncMysqlDriver implements DriverInterface
         return 'MySQL';
     }
 
+    /**
+     * Get driver source database or file name.
+     *
+     * @psalm-return non-empty-string
+     *
+     * @throws DriverException
+     */
+    public function getSource(): string
+    {
+        $config = $this->config->connection;
+
+        return $config instanceof ProvidesSourceString ? $config->getSourceString() : '*';
+    }
+
     public function getTimezone(): \DateTimeZone
     {
         return $this->timezone;
@@ -135,6 +151,14 @@ class AsyncMysqlDriver implements DriverInterface
     {
         return $this->queryBuilder;
     }
+
+	/**
+	 * Quote identifier using the current compiler rules.
+	 */
+	public function identifier(string $identifier): string
+	{
+		return $this->queryCompiler->quoteIdentifier($identifier);
+	}
 
     public function connect(): void
     {
@@ -261,6 +285,35 @@ class AsyncMysqlDriver implements DriverInterface
     {
         Async\await($this->pool->quit());
     }
+
+	/**
+	 * Backwards-compatibility helpers mirroring Cycle's Driver magic calls.
+	 */
+	public function __call(string $name, array $arguments): mixed
+	{
+		return match ($name) {
+			'isProfiling' => true,
+			'setProfiling' => null,
+			'getSchema' => $this->getSchemaHandler()->getSchema(
+				$arguments[0],
+				$arguments[1] ?? null,
+			),
+			'tableNames' => $this->getSchemaHandler()->getTableNames(),
+			'hasTable' => $this->getSchemaHandler()->hasTable($arguments[0]),
+			'identifier' => $this->getQueryCompiler()->quoteIdentifier($arguments[0]),
+			'eraseData' => $this->getSchemaHandler()->eraseTable(
+				$this->getSchemaHandler()->getSchema($arguments[0]),
+			),
+			'insertQuery',
+			'selectQuery',
+			'updateQuery',
+			'deleteQuery' => \call_user_func_array(
+				[$this->queryBuilder, $name],
+				$arguments,
+			),
+			default => throw new \Cycle\Database\Exception\DriverException("Undefined driver method `{$name}`"),
+		};
+	}
 
     private function mapException(\Throwable $exception, string $query): StatementException
     {
