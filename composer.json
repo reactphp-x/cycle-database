@@ -3,7 +3,7 @@
     "require": {
         "reactphp-x/mysql-pool": "^2.0",
         "react/async": "^4",
-        "wpjscc/database": "^2"
+        "wpjscc/database": "2.x-dev"
     },
     "license": "MIT",
     "autoload": {

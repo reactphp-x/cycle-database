@@ -182,29 +182,31 @@ final class AsyncDatabase implements DatabaseInterface
         callable $callback,
         ?string $isolationLevel = null,
     ): mixed {
-
+        $txDb = $this->begin($isolationLevel);
         try {
-            $result = $callback($this);
-
+            $result = $callback($txDb);
+            $txDb->commit();
             return $result;
         } catch (\Throwable $e) {
+            $txDb->rollback();
             throw $e;
         }
     }
 
-    public function begin(?string $isolationLevel = null): bool
+    public function begin(?string $isolationLevel = null): DatabaseInterface
     {
-        throw new \BadMethodCallException('begin is not supported. Use transaction(callable).');
+        $txDriver = $this->getDriver(self::WRITE)->beginTransaction($isolationLevel);
+        return new self($this->name, $this->prefix, $txDriver, $this->readDriver);
     }
 
     public function commit(): bool
     {
-        throw new \BadMethodCallException('commit is not supported. Use transaction(callable).');
+        return $this->getDriver(self::WRITE)->commitTransaction();
     }
 
     public function rollback(): bool
     {
-        throw new \BadMethodCallException('rollback is not supported. Use transaction(callable).');
+        return $this->getDriver(self::WRITE)->rollbackTransaction();
     }
 
     public function withoutCache(): self

@@ -4,7 +4,6 @@ require __DIR__ . '/../vendor/autoload.php';
 
 use Cycle\Database\Config as Config;
 use ReactphpX\CycleDatabase\AsyncDatabaseManager;
-use ReactphpX\CycleDatabase\AsyncMysqlDriver;
 use ReactphpX\CycleDatabase\AsyncMySQLDriverConfig;
 use ReactphpX\CycleDatabase\AsyncTcpConnectionConfig;
 use function React\Async\await;
@@ -41,13 +40,10 @@ $db = $dbal->database('default');
 
 $db->execute('CREATE TABLE IF NOT EXISTS demo_tx (id INT AUTO_INCREMENT PRIMARY KEY, val INT)');
 
-// Note: AsyncMysqlDriver recommends using transaction(callable)
-/** @var AsyncMysqlDriver $driver */
-$driver = $db->getDriver();
-
-$result = $driver->transaction(function ($conn) {
-    await($conn->query('INSERT INTO demo_tx (val) VALUES (?)', [100]));
-    await($conn->query('INSERT INTO demo_tx (val) VALUES (?)', [200]));
+// Use Database-level transaction helper
+$result = $db->transaction(function ($txDb) {
+    $txDb->execute('INSERT INTO demo_tx (val) VALUES (?)', [100]);
+    $txDb->execute('INSERT INTO demo_tx (val) VALUES (?)', [200]);
     return 'ok';
 });
 

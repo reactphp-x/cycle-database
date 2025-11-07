@@ -241,19 +241,38 @@ class AsyncMysqlDriver implements DriverInterface
         return $this->lastInsertId;
     }
 
-    public function beginTransaction(?string $isolationLevel = null): bool
+    public function beginTransaction(?string $isolationLevel = null): \Cycle\Database\Driver\DriverInterface
     {
-        throw new \BadMethodCallException('beginTransaction is not supported. Use transaction(callable).');
+        $connection = Async\await($this->pool->getConnection());
+        try {
+            Async\await($connection->query('BEGIN'));
+            if ($isolationLevel !== null) {
+                Async\await($connection->query('SET TRANSACTION ISOLATION LEVEL ' . $isolationLevel));
+            }
+        } catch (\Throwable $e) {
+            $this->pool->releaseConnection($connection);
+            throw $this->mapException($e, 'BEGIN TRANSACTION');
+        }
+        return new AsyncTransactionDriver(
+            $this->pool,
+            $connection,
+            $this->getTimezone(),
+            $this->getSchemaHandler(),
+            $this->getQueryCompiler(),
+            $this->getQueryBuilder(),
+            $this->isReadonly(),
+            $this->getSource(),
+        );
     }
 
     public function commitTransaction(): bool
     {
-        throw new \BadMethodCallException('commitTransaction is not supported. Use transaction(callable).');
+        throw new \BadMethodCallException('Call commitTransaction() on the transaction driver returned by beginTransaction().');
     }
 
     public function rollbackTransaction(): bool
     {
-        throw new \BadMethodCallException('rollbackTransaction is not supported. Use transaction(callable).');
+        throw new \BadMethodCallException('Call rollbackTransaction() on the transaction driver returned by beginTransaction().');
     }
 
     public function getTransactionLevel(): int
@@ -261,10 +280,7 @@ class AsyncMysqlDriver implements DriverInterface
         return 0;
     }
 
-    public function transaction(callable $callable)
-    {
-        return Async\await($this->pool->transaction($callable));
-    }
+    // transaction is handled at Database level for async drivers
 
     public function queryStream(string $sql, array $params = [])
     {
