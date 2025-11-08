@@ -5,10 +5,18 @@
         "react/async": "^4",
         "wpjscc/database": "2.x-dev"
     },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5"
+    },
     "license": "MIT",
     "autoload": {
         "psr-4": {
             "ReactphpX\\CycleDatabase\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
         }
     },
     "minimum-stability": "dev",
@@ -17,5 +25,6 @@
             "name": "wpjscc",
             "email": "wpjscc@gmail.com"
         }
-    ]
+    ],
+    "prefer-stable": true
 }

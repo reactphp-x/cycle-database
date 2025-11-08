@@ -317,8 +317,9 @@ class AsyncMysqlDriver implements DriverInterface, LoggerAwareInterface
             $this->getSource(),
             $this->config->options ?? [],
         );
-        // Propagate logger and logging options
-        $txDriver->setLogger($this->logger ?? null);
+        if ($this->logger !== null) {
+            $txDriver->setLogger($this->logger);
+        }
         return $txDriver;
     }
 
