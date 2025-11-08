@@ -46,7 +46,7 @@ class AsyncStatement implements StatementInterface, \IteratorAggregate
         return $row[$idx] ?? null;
     }
 
-    public function fetchAll(int $mode = self::FETCH_OBJ): array
+    public function fetchAll(int $mode = self::FETCH_ASSOC): array
     {
         if (!isset($this->result->resultRows)) {
             return [];
