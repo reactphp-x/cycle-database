@@ -21,13 +21,26 @@ use Cycle\Database\Exception\StatementException;
 use Cycle\Database\Query\BuilderInterface;
 use Cycle\Database\Query\InsertQuery;
 use Cycle\Database\Query\QueryBuilder;
+use Cycle\Database\Query\Interpolator;
 use Cycle\Database\StatementInterface;
 use React\Async;
 use ReactphpX\MySQL\Pool;
 use Cycle\Database\Config\ProvidesSourceString;
+use Cycle\Database\Injection\ParameterInterface as DbParameterInterface;
+use Cycle\Database\Exception\DriverException;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 
-class AsyncMysqlDriver implements DriverInterface
+class AsyncMysqlDriver implements DriverInterface, LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
+    /**
+     * DateTime format to be used to perform automatic conversion of DateTime objects.
+     */
+    protected const DATETIME = 'Y-m-d H:i:s';
+    protected const DATETIME_MICROSECONDS = 'Y-m-d H:i:s.u';
+
     private Pool $pool;
     private $lastInsertId = null;
     private DriverConfig $config;
@@ -173,7 +186,11 @@ class AsyncMysqlDriver implements DriverInterface
 
     public function disconnect(): void
     {
-        $this->pool->close();
+        try {
+            $this->pool->close();
+        } catch (\Throwable $e) {
+            $this->logger?->error($e->getMessage());
+        }
     }
 
     public function quote(mixed $value, int $type = \PDO::PARAM_STR): string
@@ -197,16 +214,32 @@ class AsyncMysqlDriver implements DriverInterface
 
     public function query(string $statement, array $parameters = []): StatementInterface
     {
+        $queryStart = \microtime(true);
         try {
-            $parameters = array_map(function ($parameter) {
-                if ($parameter instanceof \Cycle\Database\Injection\Parameter) {
-                    return $parameter->getValue();
-                }
-                return $parameter;
-            }, $parameters);
+            $parameters = $this->normalizeParameters($parameters);
             $result = Async\await($this->pool->query($statement, $parameters));
-        } catch (\Throwable $e) {
-            throw $this->mapException($e, $statement);
+        } catch (\Throwable $err) {
+            $e = $this->mapException($err, Interpolator::interpolate($statement, $parameters));
+            throw $e;
+        } finally {
+            if ($this->logger !== null) {
+                $queryString = $this->config->options['logInterpolatedQueries']
+                    ? Interpolator::interpolate($statement, $parameters, $this->config->options)
+                    : $statement;
+
+                $contextParameters = $this->config->options['logQueryParameters'] ?? false
+                    ? $parameters
+                    : [];
+
+                $context = $this->defineLoggerContext($queryStart, $result ?? null, $contextParameters);
+
+                if (isset($e)) {
+                    $this->logger->error($queryString, $context);
+                    $this->logger->alert($e->getMessage());
+                } else {
+                    $this->logger->info($queryString, $context);
+                }
+            }
         }
         if (isset($result->insertId) && $result->insertId !== 0) {
             $this->lastInsertId = $result->insertId;
@@ -219,16 +252,32 @@ class AsyncMysqlDriver implements DriverInterface
         if ($this->isReadonly()) {
             throw ReadonlyConnectionException::onWriteStatementExecution();
         }
+        $queryStart = \microtime(true);
         try {
-            $parameters = array_map(function ($parameter) {
-                if ($parameter instanceof \Cycle\Database\Injection\Parameter) {
-                    return $parameter->getValue();
-                }
-                return $parameter;
-            }, $parameters);
+            $parameters = $this->normalizeParameters($parameters);
             $result = Async\await($this->pool->query($query, $parameters));
-        } catch (\Throwable $e) {
-            throw $this->mapException($e, $query);
+        } catch (\Throwable $err) {
+            $e = $this->mapException($err, Interpolator::interpolate($query, $parameters));
+            throw $e;
+        } finally {
+            if ($this->logger !== null) {
+                $queryString = $this->config->options['logInterpolatedQueries']
+                    ? Interpolator::interpolate($query, $parameters, $this->config->options)
+                    : $query;
+
+                $contextParameters = $this->config->options['logQueryParameters'] ?? false
+                    ? $parameters
+                    : [];
+
+                $context = $this->defineLoggerContext($queryStart, $result ?? null, $contextParameters);
+
+                if (isset($e)) {
+                    $this->logger->error($queryString, $context);
+                    $this->logger->alert($e->getMessage());
+                } else {
+                    $this->logger->info($queryString, $context);
+                }
+            }
         }
         if (isset($result->insertId) && $result->insertId !== 0) {
             $this->lastInsertId = $result->insertId;
@@ -238,22 +287,26 @@ class AsyncMysqlDriver implements DriverInterface
 
     public function lastInsertID(?string $sequence = null)
     {
-        return $this->lastInsertId;
+        $result = $this->lastInsertId;
+        $this->logger?->debug("Insert ID: {$result}");
+        return $result;
     }
 
     public function beginTransaction(?string $isolationLevel = null): \Cycle\Database\Driver\DriverInterface
     {
         $connection = Async\await($this->pool->getConnection());
         try {
+            $this->logger?->info('Begin transaction');
             Async\await($connection->query('BEGIN'));
             if ($isolationLevel !== null) {
+                $this->logger?->info("Transaction isolation level '{$isolationLevel}'");
                 Async\await($connection->query('SET TRANSACTION ISOLATION LEVEL ' . $isolationLevel));
             }
         } catch (\Throwable $e) {
             $this->pool->releaseConnection($connection);
             throw $this->mapException($e, 'BEGIN TRANSACTION');
         }
-        return new AsyncTransactionDriver(
+        $txDriver = new AsyncTransactionDriver(
             $this->pool,
             $connection,
             $this->getTimezone(),
@@ -262,6 +315,56 @@ class AsyncMysqlDriver implements DriverInterface
             $this->getQueryBuilder(),
             $this->isReadonly(),
             $this->getSource(),
+            $this->config->options ?? [],
+        );
+        // Propagate logger and logging options
+        $txDriver->setLogger($this->logger ?? null);
+        return $txDriver;
+    }
+
+    /**
+     * Normalize parameters for execution by unwrapping ParameterInterface, BackedEnum,
+     * and formatting DateTimeInterface using connection timezone.
+     */
+    private function normalizeParameters(iterable $parameters): array
+    {
+        $normalized = [];
+        foreach ($parameters as $name => $parameter) {
+            $normalized[$name] = $this->normalizeParameterValue($parameter);
+        }
+        return $normalized;
+    }
+
+    private function normalizeParameterValue(mixed $parameter): mixed
+    {
+        if ($parameter instanceof DbParameterInterface) {
+            $parameter = $parameter->getValue();
+        }
+        /** @since PHP 8.1 */
+        if ($parameter instanceof \BackedEnum) {
+            $parameter = $parameter->value;
+        }
+        if ($parameter instanceof \DateTimeInterface) {
+            $parameter = $this->formatDatetime($parameter);
+        }
+        return $parameter;
+    }
+
+    private function formatDatetime(\DateTimeInterface $value): string
+    {
+        try {
+            $datetime = match (true) {
+                $value instanceof \DateTimeImmutable => $value->setTimezone($this->getTimezone()),
+                $value instanceof \DateTime => \DateTimeImmutable::createFromMutable($value)
+                    ->setTimezone($this->getTimezone()),
+                default => (new \DateTimeImmutable('now', $this->getTimezone()))->setTimestamp($value->getTimestamp()),
+            };
+        } catch (\Throwable $e) {
+            throw new DriverException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        return $datetime->format(
+            $this->config->options['withDatetimeMicroseconds'] ? self::DATETIME_MICROSECONDS : self::DATETIME,
         );
     }
 
@@ -294,12 +397,20 @@ class AsyncMysqlDriver implements DriverInterface
 
     public function close(): void
     {
-        $this->pool->close();
+        try {
+            $this->pool->close();
+        } catch (\Throwable $e) {
+            $this->logger?->error($e->getMessage());
+        }
     }
 
     public function quit(): void
     {
-        Async\await($this->pool->quit());
+        try {
+            Async\await($this->pool->quit());
+        } catch (\Throwable $e) {
+            $this->logger?->error($e->getMessage());
+        }
     }
 
 	/**
@@ -330,6 +441,36 @@ class AsyncMysqlDriver implements DriverInterface
 			default => throw new \Cycle\Database\Exception\DriverException("Undefined driver method `{$name}`"),
 		};
 	}
+
+    /**
+     * Creating a context for logging
+     *
+     * @param float $queryStart Query start time
+     * @param mixed $result Statement/Result object
+     * @param iterable $parameters Query parameters
+     */
+    protected function defineLoggerContext(float $queryStart, mixed $result, iterable $parameters = []): array
+    {
+        $context = [
+            'driver' => $this->getType(),
+            'elapsed' => \microtime(true) - $queryStart,
+        ];
+
+        // Try to determine row count from result object shape
+        if (\is_object($result)) {
+            if (isset($result->affectedRows)) {
+                $context['rowCount'] = (int)$result->affectedRows;
+            } elseif (isset($result->resultRows) && \is_array($result->resultRows)) {
+                $context['rowCount'] = \count($result->resultRows);
+            }
+        }
+
+        foreach ($parameters as $parameter) {
+            $context['parameters'][] = Interpolator::resolveValue($parameter, $this->config->options ?? []);
+        }
+
+        return $context;
+    }
 
     private function mapException(\Throwable $exception, string $query): StatementException
     {
@@ -378,11 +519,4 @@ class AsyncMysqlDriver implements DriverInterface
         return $auth . $host . $port . '/' . $db . $qs;
     }
 
-    private function formatDatetime(\DateTimeInterface $value): string
-    {
-        $datetime = $value instanceof \DateTimeImmutable
-            ? $value->setTimezone($this->timezone)
-            : (\DateTimeImmutable::createFromMutable($value))->setTimezone($this->timezone);
-        return $datetime->format('Y-m-d H:i:s');
-    }
 }
