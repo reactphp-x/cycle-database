@@ -348,7 +348,7 @@ class AsyncMysqlDriver implements DriverInterface, LoggerAwareInterface
         if ($parameter instanceof \DateTimeInterface) {
             $parameter = $this->formatDatetime($parameter);
         }
-        return $parameter;
+        return is_object($parameter) ? (string) $parameter : $parameter;
     }
 
     private function formatDatetime(\DateTimeInterface $value): string
